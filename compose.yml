@@ -1,0 +1,36 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: oasis-virtual-collection:latest
+    container_name: oasis-virtual-collection
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      # Copy .env.example to .env and fill in your values
+      - path: .env
+        required: false
+    environment:
+      # These defaults are applied when not set in .env
+      UPSTREAM_EDR_BASE_URL: "${UPSTREAM_EDR_BASE_URL:-https://observations.meteogate.eu}"
+      VIRTUAL_COLLECTION_ID: "${VIRTUAL_COLLECTION_ID:-virtual}"
+      VIRTUAL_COLLECTION_TITLE: "${VIRTUAL_COLLECTION_TITLE:-OASIS Virtual Observations Collection}"
+      API_BASE_URL: "${API_BASE_URL:-http://localhost:8000}"
+      CONFIG_FILE: "config/virtual_collections.json"
+    volumes:
+      # Mount source code for hot-reload on change
+      - ./app:/app/app
+      # Mount config directory so parameters can be updated without rebuilding
+      - ./config:/app/config:ro
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--proxy-headers", "--forwarded-allow-ips=*"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+

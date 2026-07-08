@@ -1,0 +1,128 @@
+{
+  "_comment": "Virtual collection parameter configuration. Each key is a parameter-name exposed by this API.",
+  "_comment_custom_dimensions": [
+    "The optional 'custom_dimensions' object on any parameter is forwarded verbatim as extra",
+    "query parameters on every upstream request for that parameter. Available dimensions:",
+    "  standard_name  - CF standard name (https://vocab.nerc.ac.uk/standard_name/); also used",
+    "                   to remap the upstream response key to this parameter's virtual name",
+    "  level          - Height of measurement above ground level in meters (e.g. \"2\", \"10\")",
+    "  method         - Time aggregation function (e.g. \"mean\", \"sum\", \"min\", \"max\")",
+    "  duration       - ISO 8601 aggregation duration (e.g. \"PT1H\", \"PT10M\", \"P1D\")",
+    "Parameters that share an upstream collection but differ in custom_dimensions are sent",
+    "as separate upstream requests and merged before returning to the client."
+  ],
+  "air_temperature_2m": {
+    "upstream_collection": "observations",
+    "title": "Air Temperature",
+    "description": "Air temperature measured at 2 m above ground",
+    "unit": {
+      "label": "degree Celsius",
+      "symbol": {
+        "value": "Cel",
+        "type": "http://www.opengis.net/def/uom/UCUM/"
+      }
+    },
+    "observed_property": {
+      "id": "http://vocab.nerc.ac.uk/standard_name/air_temperature/",
+      "label": "Air Temperature"
+    },
+    "data_type": "float",
+    "custom_dimensions": {
+      "standard_name": "air_temperature",
+      "level": "1.25/2",
+      "method": "point",
+      "duration": "PT0S"
+    }
+  },
+  "relative_humidity_surface": {
+    "upstream_collection": "observations",
+    "title": "Relative Humidity",
+    "description": "Relative humidity of the air at 2 m above ground",
+    "unit": {
+      "label": "percent",
+      "symbol": {
+        "value": "%",
+        "type": "http://www.opengis.net/def/uom/UCUM/"
+      }
+    },
+    "observed_property": {
+      "id": "http://vocab.nerc.ac.uk/standard_name/relative_humidity/",
+      "label": "Relative Humidity"
+    },
+    "data_type": "float",
+    "custom_dimensions": {
+      "standard_name": "relative_humidity",
+      "level": "1.25/2",
+      "method": "point",
+      "duration": "PT0S"
+    }
+  },
+  "wind_speed_10m": {
+    "upstream_collection": "observations",
+    "title": "Wind Speed",
+    "description": "Wind speed at 10 m above ground",
+    "unit": {
+      "label": "metre per second",
+      "symbol": {
+        "value": "m/s",
+        "type": "http://www.opengis.net/def/uom/UCUM/"
+      }
+    },
+    "observed_property": {
+      "id": "http://vocab.nerc.ac.uk/standard_name/wind_speed/",
+      "label": "Wind Speed"
+    },
+    "data_type": "float",
+    "custom_dimensions": {
+      "standard_name": "wind_speed",
+      "level": "9.5/10.5",
+      "method": "point",
+      "duration": "PT0S"
+    }
+  },
+  "wind_direction_10m": {
+    "upstream_collection": "observations",
+    "title": "Wind Direction",
+    "description": "Wind direction at 10 m above ground (degrees from north)",
+    "unit": {
+      "label": "degree true",
+      "symbol": {
+        "value": "deg",
+        "type": "http://www.opengis.net/def/uom/UCUM/"
+      }
+    },
+    "observed_property": {
+      "id": "http://vocab.nerc.ac.uk/standard_name/wind_from_direction/",
+      "label": "Wind Direction"
+    },
+    "data_type": "float",
+    "custom_dimensions": {
+      "standard_name": "wind_from_direction",
+      "level": "9.5/10.5",
+      "method": "point",
+      "duration": "PT0S"
+    }
+  },
+  "precipitation_amount_1h": {
+    "upstream_collection": "observations",
+    "title": "Precipitation Amount",
+    "description": "Total precipitation amount over the observation period",
+    "unit": {
+      "label": "millimetre",
+      "symbol": {
+        "value": "mm",
+        "type": "http://www.opengis.net/def/uom/UCUM/"
+      }
+    },
+    "observed_property": {
+      "id": "http://vocab.nerc.ac.uk/standard_name/precipitation_amount/",
+      "label": "Precipitation Amount"
+    },
+    "data_type": "float",
+    "custom_dimensions": {
+      "standard_name": "precipitation_amount",
+      "method": "sum",
+      "duration": "PT1H"
+    }
+  }
+}
