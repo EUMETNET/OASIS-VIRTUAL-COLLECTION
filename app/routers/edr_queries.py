@@ -8,9 +8,9 @@ Supported query types:
   position, radius, area, cube, trajectory, corridor, locations, items
 """
 
-from __future__ import annotations
-
+import os
 import json
+import logging
 from collections import defaultdict
 from typing import Any
 
@@ -25,8 +25,15 @@ from app.config import ParameterConfig
 from app.config import VirtualCollectionConfig
 from app.config import get_settings
 from app.config import get_virtual_collection_config
-from app.proxy import upstream_get_raw
+from app.proxy import upstream_get
 
+logger = logging.getLogger(__name__)
+
+logger.setLevel(
+    {"info": logging.INFO, "debug": logging.DEBUG}[
+        os.getenv("LOG_LEVEL", "info").lower()
+    ],
+)
 router = APIRouter(
     prefix="/collections/{collection_id}",
     tags=["EDR Queries"],
@@ -46,6 +53,7 @@ JSON_MEDIA_TYPE = "application/json"
 def _check_collection(collection_id: str) -> None:
     settings = get_settings()
     if collection_id != settings.virtual_collection_id:
+        logger.debug("Collection '%s' not found", collection_id)
         raise HTTPException(
             status_code=404,
             detail=f"Collection '{collection_id}' not found.",
@@ -76,17 +84,29 @@ def _resolve_parameters(
 
     unknown = [p for p in requested if p not in cfg]
     if unknown:
+        logger.warning(
+            "Unknown parameter-name(s) requested: %s. Available: %s",
+            ", ".join(unknown),
+            ", ".join(cfg.keys()),
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Unknown parameter-name(s): {', '.join(unknown)}. "
-                   f"Available: {', '.join(cfg.keys())}",
+            f"Available: {', '.join(cfg.keys())}",
         )
 
     grouped: dict[_GroupKey, list[tuple[str, ParameterConfig]]] = defaultdict(list)
     for name in requested:
         param_cfg = cfg[name]
-        dims_key: tuple[tuple[str, str], ...] = tuple(sorted(param_cfg.custom_dimensions.items()))
+        dims_key: tuple[tuple[str, str], ...] = tuple(
+            sorted(param_cfg.custom_dimensions.items())
+        )
         grouped[(param_cfg.upstream_collection, dims_key)].append((name, param_cfg))
+    logger.debug(
+        "Resolved %d virtual parameter(s) into %d upstream group(s)",
+        len(requested),
+        len(grouped),
+    )
     return grouped
 
 
@@ -103,8 +123,8 @@ async def _proxy_query(
     # Remove None values
     params = {k: v for k, v in params.items() if v is not None}
     path = f"/collections/{upstream_collection}/{query_type}"
-    raw = await upstream_get_raw(path, params=params)
-    return json.loads(raw)
+    logger.debug("Proxying %s → %s params=%s", query_type, path, params)
+    return await upstream_get(path, params=params)
 
 
 def _build_covjson_parameter(name: str, cfg: ParameterConfig) -> dict[str, Any]:
@@ -175,6 +195,10 @@ def _remap_coverage_parameter_names(
     def remap_single_coverage(cov: dict[str, Any]) -> dict[str, Any]:
         """Remap parameters and ranges inside one Coverage object."""
         key_map = make_key_map(cov.get("parameters", {}))
+        if key_map:
+            logger.debug(
+                "Remapping %d parameter key(s): %s", len(key_map), list(key_map.keys())
+            )
         if "parameters" in cov:
             cov["parameters"] = remap_dict(cov["parameters"], key_map)
         if "ranges" in cov:
@@ -224,8 +248,7 @@ def _rewrite_parameter_metadata(
     FeatureCollection responses (which carry a top-level ``parameters`` dict).
     """
     canonical: dict[str, dict[str, Any]] = {
-        vname: _build_covjson_parameter(vname, cfg)
-        for vname, cfg in upstream_params
+        vname: _build_covjson_parameter(vname, cfg) for vname, cfg in upstream_params
     }
 
     def rewrite_params(params_dict: dict[str, Any]) -> dict[str, Any]:
@@ -288,7 +311,7 @@ def _rewrite_upstream_urls(
     def rewrite_href(href: str) -> str:
         for old, new in replacements:
             if href.startswith(old):
-                return new + href[len(old):]
+                return new + href[len(old) :]
         return href
 
     def rewrite_links(links: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -298,7 +321,11 @@ def _rewrite_upstream_urls(
         ]
 
     if "links" in data:
-        data["links"] = rewrite_links(data["links"])
+        rewritten = rewrite_links(data["links"])
+        n_rewritten = sum(1 for old, new in zip(data["links"], rewritten) if old != new)
+        if n_rewritten:
+            logger.debug("Rewrote %d top-level link(s) to local API URLs", n_rewritten)
+        data["links"] = rewritten
 
     if "features" in data:
         for feature in data["features"]:
@@ -314,6 +341,12 @@ async def _run_query(
     parameter_name: str | None,
     extra_params: dict[str, Any],
 ) -> Response:
+    logger.debug(
+        "Query type='%s' collection='%s' parameter_name=%s",
+        query_type,
+        collection_id,
+        parameter_name or "<all>",
+    )
     _check_collection(collection_id)
     cfg = get_virtual_collection_config()
     grouped = _resolve_parameters(parameter_name, cfg)
@@ -322,8 +355,16 @@ async def _run_query(
     upstream_params_per_group: list[list[tuple[str, ParameterConfig]]] = []
 
     for (upstream_collection, _dims_key), upstream_params in grouped.items():
-        data = await _proxy_query(query_type, upstream_collection, upstream_params, extra_params)
-        results.append(data)
+        response = await _proxy_query(
+            query_type, upstream_collection, upstream_params, extra_params
+        )
+        logger.debug(
+            "Upstream response type='%s'",
+            response.get("type")
+            if isinstance(response, dict)
+            else type(response).__name__,
+        )
+        results.append(response.json())
         upstream_params_per_group.append(upstream_params)
 
     if len(results) == 0:
@@ -331,9 +372,7 @@ async def _run_query(
 
     # Remap keys then rewrite parameter metadata to our canonical form
     remapped = [
-        _rewrite_parameter_metadata(
-            _remap_coverage_parameter_names(r, p), p
-        )
+        _rewrite_parameter_metadata(_remap_coverage_parameter_names(r, p), p)
         for r, p in zip(results, upstream_params_per_group)
     ]
 
@@ -357,6 +396,7 @@ async def _run_query(
 
 def _merge_coverages(coverages: list[dict[str, Any]]) -> dict[str, Any]:
     """Merge multiple CoverageJSON responses into one CoverageCollection or Coverage."""
+    logger.debug("Merging %d coverage response(s)", len(coverages))
     base = coverages[0]
     cov_type = base.get("type", "")
 
@@ -397,9 +437,7 @@ def _detect_media_type(data: dict[str, Any]) -> str:
 # Query endpoints
 # ---------------------------------------------------------------------------
 
-_COORDS_DESCRIPTION = (
-    "A Well Known Text (WKT) point geometry, e.g. `POINT(lon lat)`."
-)
+_COORDS_DESCRIPTION = "A Well Known Text (WKT) point geometry, e.g. `POINT(lon lat)`."
 
 
 @router.get(
@@ -419,7 +457,10 @@ async def position_query(
         alias="parameter-name",
         description="Comma-separated list of virtual parameter names to return.",
     ),
-    datetime: str = Query(..., description="RFC 3339 datetime or interval (e.g. `2024-01-01T00:00:00Z` or `2024-01-01T00:00:00Z/2024-01-02T00:00:00Z`)."),
+    datetime: str = Query(
+        ...,
+        description="RFC 3339 datetime or interval (e.g. `2024-01-01T00:00:00Z` or `2024-01-01T00:00:00Z/2024-01-02T00:00:00Z`).",
+    ),
     z: str | None = Query(None, description="Vertical level or range."),
     crs: str | None = Query(None, description="Target CRS."),
     f: str | None = Query("CoverageJSON", description="Output format."),
@@ -442,7 +483,9 @@ async def radius_query(
     collection_id: str,
     coords: str = Query(..., description=_COORDS_DESCRIPTION),
     within: float = Query(..., description="Radius distance value."),
-    within_units: str = Query("km", description="Radius distance units (e.g. `km`, `m`)."),
+    within_units: str = Query(
+        "km", description="Radius distance units (e.g. `km`, `m`)."
+    ),
     parameter_name: str | None = Query(None, alias="parameter-name"),
     datetime: str = Query(..., description="RFC 3339 datetime or interval."),
     z: str | None = Query(None),
@@ -525,78 +568,6 @@ async def cube_query(
 
 
 @router.get(
-    "/trajectory",
-    summary="Trajectory query",
-    description="Returns data along a trajectory (WKT LINESTRING).",
-)
-async def trajectory_query(
-    request: Request,
-    collection_id: str,
-    coords: str = Query(..., description="WKT LINESTRING geometry (optionally with M/Z values)."),
-    parameter_name: str | None = Query(None, alias="parameter-name"),
-    datetime: str = Query(..., description="RFC 3339 datetime or interval."),
-    z: str | None = Query(None),
-    resolution: int | None = Query(None),
-    crs: str | None = Query(None),
-    f: str | None = Query("CoverageJSON"),
-) -> Response:
-    return await _run_query(
-        "trajectory",
-        collection_id,
-        parameter_name,
-        {
-            "coords": coords,
-            "datetime": datetime,
-            "z": z,
-            "resolution": resolution,
-            "crs": crs,
-            "f": f,
-        },
-    )
-
-
-@router.get(
-    "/corridor",
-    summary="Corridor query",
-    description="Returns data within a corridor along a trajectory.",
-)
-async def corridor_query(
-    request: Request,
-    collection_id: str,
-    coords: str = Query(..., description="WKT LINESTRING geometry."),
-    corridor_width: float = Query(..., alias="corridor-width"),
-    width_units: str = Query("km", alias="width-units"),
-    parameter_name: str | None = Query(None, alias="parameter-name"),
-    datetime: str = Query(..., description="RFC 3339 datetime or interval."),
-    z: str | None = Query(None),
-    corridor_height: float | None = Query(None, alias="corridor-height"),
-    height_units: str | None = Query(None, alias="height-units"),
-    resolution_x: float | None = Query(None, alias="resolution-x"),
-    resolution_z: float | None = Query(None, alias="resolution-z"),
-    crs: str | None = Query(None),
-    f: str | None = Query("CoverageJSON"),
-) -> Response:
-    return await _run_query(
-        "corridor",
-        collection_id,
-        parameter_name,
-        {
-            "coords": coords,
-            "corridor-width": corridor_width,
-            "width-units": width_units,
-            "datetime": datetime,
-            "z": z,
-            "corridor-height": corridor_height,
-            "height-units": height_units,
-            "resolution-x": resolution_x,
-            "resolution-z": resolution_z,
-            "crs": crs,
-            "f": f,
-        },
-    )
-
-
-@router.get(
     "/locations",
     summary="Locations query",
     description="Returns a list of available locations within the collection.",
@@ -632,6 +603,12 @@ async def location_query(
     crs: str | None = Query(None),
     f: str | None = Query("CoverageJSON"),
 ) -> Response:
+    logger.debug(
+        "Location query collection='%s' location='%s' parameter_name=%s",
+        collection_id,
+        location_id,
+        parameter_name or "<all>",
+    )
     _check_collection(collection_id)
     cfg = get_virtual_collection_config()
     grouped = _resolve_parameters(parameter_name, cfg)
@@ -640,25 +617,51 @@ async def location_query(
     upstream_params_per_group = []
     for (upstream_collection, _dims_key), upstream_params in grouped.items():
         extra_params: dict[str, Any] = {"datetime": datetime, "crs": crs, "f": f}
-        custom_dims = upstream_params[0][1].custom_dimensions if upstream_params else {}
+        # Exclude 'level' from the upstream filter: the config may specify a
+        # range (e.g. "1.5/2") or an exact value (e.g. "10"), but each station
+        # reports measurements at its own actual height.  Filtering by level
+        # would silently return no data whenever the station's exact level
+        # differs from the configured value.  We filter by standard_name and,
+        # where configured, by method and duration instead; the compound key
+        # (e.g. "air_temperature:2.0:point:PT0S") is then matched back to the
+        # correct virtual parameter via metocean:standard_name in the remap step.
+        custom_dims = (
+            {
+                k: v
+                for k, v in upstream_params[0][1].custom_dimensions.items()
+                if k != "level"
+            }
+            if upstream_params
+            else {}
+        )
         params = {**extra_params, **custom_dims}
         params = {k: v for k, v in params.items() if v is not None}
         path = f"/collections/{upstream_collection}/locations/{location_id}"
-        raw = await upstream_get_raw(path, params=params)
-        results.append(json.loads(raw))
+        logger.debug("Proxying location/%s → %s params=%s", location_id, path, params)
+        try:
+            data = await upstream_get(path, params=params)
+        except ValueError:
+            logger.debug(
+                "Data not found for location/%s → %s params=%s",
+                location_id,
+                path,
+                params,
+            )
+            continue
+
+        if data:
+            results.append(data.json())
         upstream_params_per_group.append(upstream_params)
 
     if not results:
         raise HTTPException(status_code=404, detail="Location not found.")
 
     remapped = [
-        _rewrite_parameter_metadata(
-            _remap_coverage_parameter_names(r, p), p
-        )
+        _rewrite_parameter_metadata(_remap_coverage_parameter_names(r, p), p)
         for r, p in zip(results, upstream_params_per_group)
     ]
     merged = remapped[0] if len(remapped) == 1 else _merge_coverages(remapped)
-    return Response(content=json.dumps(merged), media_type=_detect_media_type(merged))
+    return JSONResponse(content=merged)
 
 
 @router.get(
@@ -698,6 +701,7 @@ async def item_query(
     item_id: str,
     f: str | None = Query("GeoJSON"),
 ) -> Response:
+    logger.debug("Item query collection='%s' item='%s'", collection_id, item_id)
     _check_collection(collection_id)
     cfg = get_virtual_collection_config()
     # Items by ID use the first upstream collection (items are not parameter-specific)
@@ -705,7 +709,6 @@ async def item_query(
     params: dict[str, Any] = {"f": f}
     params = {k: v for k, v in params.items() if v is not None}
     path = f"/collections/{first_upstream}/items/{item_id}"
-    raw = await upstream_get_raw(path, params=params)
-    data = json.loads(raw)
+    data = await upstream_get(path, params=params)
     media_type = _detect_media_type(data)
     return Response(content=json.dumps(data), media_type=media_type)

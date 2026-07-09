@@ -1,15 +1,24 @@
 """Async HTTP client for proxying requests to the upstream EDR API."""
 
-from __future__ import annotations
-
+import os
 from typing import Any
-from urllib.parse import urljoin
 
 import httpx
 from fastapi import HTTPException
 
 from app.config import Settings
 from app.config import get_settings
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+logger.setLevel(
+    {"info": logging.INFO, "debug": logging.DEBUG}[
+        os.getenv("LOG_LEVEL", "info").lower()
+    ],
+)
 
 # A single shared async client, created at startup and closed at shutdown
 _client: httpx.AsyncClient | None = None
@@ -34,6 +43,9 @@ async def init_client(settings: Settings | None = None) -> None:
         timeout=30.0,
         follow_redirects=True,
     )
+    logger.debug(
+        "HTTP client initialised with base_url=%s", settings.upstream_edr_base_url
+    )
 
 
 async def close_client() -> None:
@@ -41,42 +53,30 @@ async def close_client() -> None:
     if _client is not None:
         await _client.aclose()
         _client = None
+        logger.debug("HTTP client closed")
 
 
 async def upstream_get(path: str, params: dict[str, Any] | None = None) -> Any:
     """Perform a GET against the upstream EDR API and return the parsed JSON body."""
     client = get_client()
+    logger.debug("Upstream GET path=%s params=%s", path, params)
     try:
-        print(path, params)
         response = await client.get(path, params=params)
         response.raise_for_status()
-        return response.json()
+        logger.debug("Upstream GET path=%s status=%s", path, response.status_code)
+        return response
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=f"Upstream API error: {exc.response.text}",
+        logger.debug(
+            "Upstream HTTP error for path=%s: status=%s body=%s",
+            path,
+            exc.response.status_code,
+            exc.response.text,
+        )
+        raise ValueError(
+            f"Upstream API error: {exc.response.text} status_code={exc.response.status_code}",
         ) from exc
     except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Could not reach upstream EDR API: {exc}",
-        ) from exc
-
-
-async def upstream_get_raw(path: str, params: dict[str, Any] | None = None) -> bytes:
-    """Return the raw bytes from an upstream response (e.g. for CoverageJSON pass-through)."""
-    client = get_client()
-    try:
-        print(path, params)
-        response = await client.get(path, params=params)
-        response.raise_for_status()
-        return response.content
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=f"Upstream API error: {exc.response.text}",
-        ) from exc
-    except httpx.RequestError as exc:
+        logger.warning("Could not reach upstream EDR API for path=%s: %s", path, exc)
         raise HTTPException(
             status_code=502,
             detail=f"Could not reach upstream EDR API: {exc}",

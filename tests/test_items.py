@@ -5,9 +5,6 @@ Uses httpx's ASGI transport to test endpoints without a live server.
 Upstream proxy calls to meteogate are mocked with respx where needed.
 """
 
-from __future__ import annotations
-
-import json
 import logging
 import pytest
 from httpx import ASGITransport
@@ -128,7 +125,16 @@ async def test_collection_has_all_query_types(client: AsyncClient):
     settings = get_settings()
     data = (await client.get(f"/collections/{settings.virtual_collection_id}")).json()
     dq = data["data_queries"]
-    for query_type in ("position", "radius", "area", "cube", "trajectory", "corridor", "locations", "items"):
+    for query_type in (
+        "position",
+        "radius",
+        "area",
+        "cube",
+        "trajectory",
+        "corridor",
+        "locations",
+        "items",
+    ):
         assert query_type in dq, f"Missing query type: {query_type}"
 
 
@@ -197,7 +203,11 @@ async def test_position_unknown_parameter_returns_400_or_502(client: AsyncClient
     settings = get_settings()
     response = await client.get(
         f"/collections/{settings.virtual_collection_id}/position",
-        params={"coords": "POINT(10 55)", "datetime": "2024-01-01T00:00:00Z", "parameter-name": "non_existent_param"},
+        params={
+            "coords": "POINT(10 55)",
+            "datetime": "2024-01-01T00:00:00Z",
+            "parameter-name": "non_existent_param",
+        },
     )
     # Our validation raises 400 before the upstream proxy is called
     assert response.status_code == 400
@@ -215,7 +225,9 @@ async def test_position_missing_datetime_returns_422(client: AsyncClient):
 async def test_location_datetime_is_optional(client: AsyncClient):
     """datetime must not be marked required for the single-location endpoint."""
     data = (await client.get("/api")).json()
-    params = data["paths"]["/collections/{collection_id}/locations/{location_id}"]["get"]["parameters"]
+    params = data["paths"]["/collections/{collection_id}/locations/{location_id}"][
+        "get"
+    ]["parameters"]
     datetime_param = next((p for p in params if p["name"] == "datetime"), None)
     assert datetime_param is not None
     assert datetime_param.get("required", False) is False
@@ -239,7 +251,9 @@ async def test_data_query_datetime_is_required(client: AsyncClient):
         params = data["paths"][path]["get"]["parameters"]
         datetime_param = next((p for p in params if p["name"] == "datetime"), None)
         assert datetime_param is not None, f"datetime param missing on {path}"
-        assert datetime_param.get("required") is True, f"datetime not required on {path}"
+        assert datetime_param.get("required") is True, (
+            f"datetime not required on {path}"
+        )
 
 
 async def test_radius_missing_within_returns_422(client: AsyncClient):
@@ -288,7 +302,12 @@ async def test_openapi_includes_edr_paths(client: AsyncClient):
 
 def test_build_covjson_parameter_basic():
     """_build_covjson_parameter produces a well-formed CoverageJSON Parameter object."""
-    from app.config import ParameterConfig, UnitConfig, UnitSymbol, ObservedPropertyConfig
+    from app.config import (
+        ParameterConfig,
+        UnitConfig,
+        UnitSymbol,
+        ObservedPropertyConfig,
+    )
     from app.routers.edr_queries import _build_covjson_parameter
 
     cfg = ParameterConfig(
@@ -310,7 +329,10 @@ def test_build_covjson_parameter_basic():
     assert result["type"] == "Parameter"
     assert result["description"] == "Air temperature at 2 m"
     assert result["dataType"] == "float"
-    assert result["observedProperty"]["id"] == "http://vocab.nerc.ac.uk/standard_name/air_temperature/"
+    assert (
+        result["observedProperty"]["id"]
+        == "http://vocab.nerc.ac.uk/standard_name/air_temperature/"
+    )
     assert result["observedProperty"]["label"] == "Air Temperature"
     assert result["unit"]["label"] == "degree Celsius"
     assert result["unit"]["symbol"]["value"] == "Cel"
@@ -338,7 +360,12 @@ def test_build_covjson_parameter_no_description():
 
 def test_rewrite_parameter_metadata_coverage():
     """_rewrite_parameter_metadata replaces upstream metadata in a Coverage."""
-    from app.config import ParameterConfig, UnitConfig, UnitSymbol, ObservedPropertyConfig
+    from app.config import (
+        ParameterConfig,
+        UnitConfig,
+        UnitSymbol,
+        ObservedPropertyConfig,
+    )
     from app.routers.edr_queries import _rewrite_parameter_metadata
 
     cfg = ParameterConfig(
@@ -419,7 +446,10 @@ def test_rewrite_parameter_metadata_coverage_collection():
     # Top-level parameters rewritten
     assert result["parameters"]["relative_humidity"]["unit"]["label"] == "percent"
     # Per-coverage parameters also rewritten
-    assert result["coverages"][0]["parameters"]["relative_humidity"]["unit"]["label"] == "percent"
+    assert (
+        result["coverages"][0]["parameters"]["relative_humidity"]["unit"]["label"]
+        == "percent"
+    )
     # Ranges untouched
     assert result["coverages"][0]["ranges"]["relative_humidity"]["values"] == [85.0]
 
@@ -479,7 +509,12 @@ def test_rewrite_parameter_metadata_noop_for_geojson():
 def test_remap_and_rewrite_feature_collection_parameters():
     """Key remap and metadata rewrite both apply to a GeoJSON FeatureCollection
     that carries a top-level parameters section (as returned by the locations endpoint)."""
-    from app.config import ParameterConfig, UnitConfig, UnitSymbol, ObservedPropertyConfig
+    from app.config import (
+        ParameterConfig,
+        UnitConfig,
+        UnitSymbol,
+        ObservedPropertyConfig,
+    )
     from app.routers.edr_queries import (
         _remap_coverage_parameter_names,
         _rewrite_parameter_metadata,
@@ -513,9 +548,7 @@ def test_remap_and_rewrite_feature_collection_parameters():
                 "metocean:standard_name": "air_temperature",
             }
         },
-        "features": [
-            {"type": "Feature", "properties": {upstream_key: 293.15}}
-        ],
+        "features": [{"type": "Feature", "properties": {upstream_key: 293.15}}],
     }
 
     upstream_params = [("air_temperature_2_m", cfg)]
@@ -554,7 +587,12 @@ def test_remap_coverage_collection_compound_keys():
             id="http://vocab.nerc.ac.uk/standard_name/air_temperature/",
             label="Air Temperature",
         ),
-        custom_dimensions={"standard_name": "air_temperature", "level": "1.5/2", "method": "point", "duration": "PT0S"},
+        custom_dimensions={
+            "standard_name": "air_temperature",
+            "level": "1.5/2",
+            "method": "point",
+            "duration": "PT0S",
+        },
     )
 
     upstream_key = "air_temperature:2.0:point:PT0S"
@@ -573,21 +611,19 @@ def test_remap_coverage_collection_compound_keys():
             {
                 "type": "Coverage",
                 "parameters": {upstream_key: upstream_param_obj},
-                "ranges": {
-                    upstream_key: {"type": "NdArray", "values": [19.2, 18.9]}
-                },
+                "ranges": {upstream_key: {"type": "NdArray", "values": [19.2, 18.9]}},
             },
             {
                 "type": "Coverage",
                 "parameters": {upstream_key: upstream_param_obj},
-                "ranges": {
-                    upstream_key: {"type": "NdArray", "values": [21.1, 20.5]}
-                },
+                "ranges": {upstream_key: {"type": "NdArray", "values": [21.1, 20.5]}},
             },
         ],
     }
 
-    result = _remap_coverage_parameter_names(coverage_collection, [("air_temperature_2_m", cfg)])
+    result = _remap_coverage_parameter_names(
+        coverage_collection, [("air_temperature_2_m", cfg)]
+    )
 
     # Top-level parameters remapped
     assert "air_temperature_2_m" in result["parameters"]
@@ -667,7 +703,9 @@ def test_remap_feature_collection_parameter_name_list():
         ],
     }
 
-    result = _remap_coverage_parameter_names(feature_collection, [("air_temperature_2_m", cfg)])
+    result = _remap_coverage_parameter_names(
+        feature_collection, [("air_temperature_2_m", cfg)]
+    )
 
     # Top-level parameters block remapped
     assert "air_temperature_2_m" in result["parameters"]
@@ -680,6 +718,101 @@ def test_remap_feature_collection_parameter_name_list():
     # Non-parameter feature properties untouched
     assert result["features"][0]["properties"]["name"] == "De Bilt"
     assert result["features"][1]["properties"]["name"] == "Deelen Airport"
+
+
+async def test_location_query_excludes_level_from_upstream_params():
+    """location_query must NOT forward the 'level' custom dimension to the
+    upstream.  Stations report measurements at their actual height; filtering
+    by a configured level (which may be a range like '1.5/2' or an exact
+    value like '10') would silently return no data whenever the station's
+    exact level differs.
+    """
+    import pytest
+    from unittest.mock import AsyncMock, patch
+    from app.config import Settings, ParameterConfig, UnitConfig, ObservedPropertyConfig
+
+    wind_speed_cfg = ParameterConfig(
+        upstream_collection="observations",
+        title="Wind Speed",
+        unit=UnitConfig(label="m/s"),
+        observed_property=ObservedPropertyConfig(
+            id="http://vocab.nerc.ac.uk/standard_name/wind_speed/",
+            label="Wind Speed",
+        ),
+        # Config says level 10, but a station may report at level 2
+        custom_dimensions={"standard_name": "wind_speed", "level": "10"},
+    )
+    virtual_cfg = {"wind_speed": wind_speed_cfg}
+
+    captured_params: list[dict] = []
+
+    async def fake_upstream_get(path: str, params=None):
+        captured_params.append(dict(params or {}))
+        # Return a minimal Coverage with the station's actual level (2.0, not 10)
+        return {
+            "type": "Coverage",
+            "domain": {
+                "type": "Domain",
+                "axes": {
+                    "x": {"values": [5.0]},
+                    "y": {"values": [52.0]},
+                    "t": {"values": ["2026-01-01T00:00:00Z"]},
+                },
+            },
+            "parameters": {
+                "wind_speed:2.0:point:PT0S": {
+                    "type": "Parameter",
+                    "observedProperty": {"label": {"en": "Wind speed"}},
+                    "unit": {"label": {"en": "m/s"}},
+                    "metocean:standard_name": "wind_speed",
+                    "metocean:level": 2.0,
+                }
+            },
+            "ranges": {
+                "wind_speed:2.0:point:PT0S": {
+                    "type": "NdArray",
+                    "values": [5.2],
+                }
+            },
+        }
+
+    settings = Settings(
+        upstream_edr_base_url="https://upstream.example.com",
+        api_base_url="http://localhost:8000",
+        virtual_collection_id="virtual",
+    )
+
+    with (
+        patch("app.routers.edr_queries.upstream_get", side_effect=fake_upstream_get),
+        patch(
+            "app.routers.edr_queries.get_virtual_collection_config",
+            return_value=virtual_cfg,
+        ),
+        patch("app.routers.edr_queries.get_settings", return_value=settings),
+    ):
+        from httpx import AsyncClient, ASGITransport
+        from app.main import app
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/collections/virtual/locations/station_001",
+                params={"parameter-name": "wind_speed", "f": "CoverageJSON"},
+            )
+
+    # The upstream must have been called without a 'level' param
+    assert len(captured_params) == 1
+    assert "level" not in captured_params[0], (
+        f"'level' was forwarded to the upstream: {captured_params[0]}"
+    )
+    assert captured_params[0].get("standard_name") == "wind_speed"
+
+    # The response should have the remapped virtual parameter key, not the compound key
+    assert response.status_code == 200
+    body = response.json()
+    assert "wind_speed" in body["parameters"]
+    assert "wind_speed" in body["ranges"]
 
 
 # ---------------------------------------------------------------------------
@@ -702,15 +835,27 @@ def test_rewrite_upstream_urls_top_level_links():
         data = {
             "type": "FeatureCollection",
             "links": [
-                {"rel": "self", "href": "https://upstream.example.com/collections/observations/locations"},
-                {"rel": "next", "href": "https://upstream.example.com/collections/observations/locations?offset=10"},
+                {
+                    "rel": "self",
+                    "href": "https://upstream.example.com/collections/observations/locations",
+                },
+                {
+                    "rel": "next",
+                    "href": "https://upstream.example.com/collections/observations/locations?offset=10",
+                },
             ],
             "features": [],
         }
         result = _rewrite_upstream_urls(data, {"observations"})
 
-    assert result["links"][0]["href"] == "http://localhost:8000/collections/virtual/locations"
-    assert result["links"][1]["href"] == "http://localhost:8000/collections/virtual/locations?offset=10"
+    assert (
+        result["links"][0]["href"]
+        == "http://localhost:8000/collections/virtual/locations"
+    )
+    assert (
+        result["links"][1]["href"]
+        == "http://localhost:8000/collections/virtual/locations?offset=10"
+    )
 
 
 def test_rewrite_upstream_urls_feature_links():
@@ -750,8 +895,14 @@ def test_rewrite_upstream_urls_feature_links():
         result = _rewrite_upstream_urls(data, {"observations"})
 
     feature_links = result["features"][0]["links"]
-    assert feature_links[0]["href"] == "http://localhost:8000/collections/virtual/locations/station_001"
-    assert feature_links[1]["href"] == "http://localhost:8000/collections/virtual/locations/station_001/position"
+    assert (
+        feature_links[0]["href"]
+        == "http://localhost:8000/collections/virtual/locations/station_001"
+    )
+    assert (
+        feature_links[1]["href"]
+        == "http://localhost:8000/collections/virtual/locations/station_001/position"
+    )
 
 
 def test_rewrite_upstream_urls_non_upstream_links_unchanged():
@@ -769,7 +920,10 @@ def test_rewrite_upstream_urls_non_upstream_links_unchanged():
         data = {
             "type": "FeatureCollection",
             "links": [
-                {"rel": "describedby", "href": "https://some-other-service.com/metadata"},
+                {
+                    "rel": "describedby",
+                    "href": "https://some-other-service.com/metadata",
+                },
             ],
             "features": [],
         }
@@ -867,7 +1021,9 @@ def test_endpoint_filter_installed_on_uvicorn_access_logger():
     from app.logging_filters import EndpointFilter
 
     uvicorn_logger = logging.getLogger("uvicorn.access")
-    endpoint_filters = [f for f in uvicorn_logger.filters if isinstance(f, EndpointFilter)]
+    endpoint_filters = [
+        f for f in uvicorn_logger.filters if isinstance(f, EndpointFilter)
+    ]
     assert len(endpoint_filters) >= 1
 
 

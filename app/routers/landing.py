@@ -1,7 +1,6 @@
 """Landing page and conformance endpoints (OGC EDR §7.2 / §7.4)."""
 
-from __future__ import annotations
-
+import os
 from fastapi import APIRouter
 from fastapi import Request
 from edr_pydantic.capabilities import ConformanceModel
@@ -9,6 +8,15 @@ from edr_pydantic.capabilities import LandingPageModel
 from edr_pydantic.link import Link
 
 from app.config import get_settings
+
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(
+    {"info": logging.INFO, "debug": logging.DEBUG}[
+        os.getenv("LOG_LEVEL", "info").lower()
+    ],
+)
 
 router = APIRouter(tags=["Capabilities"])
 

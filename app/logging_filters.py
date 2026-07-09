@@ -1,7 +1,5 @@
 """Logging filters for the OASIS Virtual Collection API."""
 
-from __future__ import annotations
-
 import logging
 
 

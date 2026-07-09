@@ -1,7 +1,6 @@
 """Application settings and virtual collection configuration loader."""
 
-from __future__ import annotations
-
+import os
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +10,16 @@ from pydantic import BaseModel
 from pydantic import HttpUrl
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+logger.setLevel(
+    {"info": logging.INFO, "debug": logging.DEBUG}[
+        os.getenv("LOG_LEVEL", "info").lower()
+    ],
+)
 
 
 class UnitSymbol(BaseModel):
@@ -61,7 +70,13 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    logger.debug(
+        "Settings loaded (upstream=%s, collection_id=%s)",
+        settings.upstream_edr_base_url,
+        settings.virtual_collection_id,
+    )
+    return settings
 
 
 @lru_cache
@@ -71,10 +86,9 @@ def get_virtual_collection_config() -> VirtualCollectionConfig:
     if not config_path.is_absolute():
         # Resolve relative to the project root (parent of this file's package)
         config_path = Path(__file__).parent.parent / config_path
+    logger.info("Loading virtual collection config from %s", config_path)
     raw: dict[str, Any] = json.loads(config_path.read_text())
     # Strip comment keys
-    return {
-        k: ParameterConfig(**v)
-        for k, v in raw.items()
-        if not k.startswith("_")
-    }
+    result = {k: ParameterConfig(**v) for k, v in raw.items() if not k.startswith("_")}
+    logger.info("Loaded %d virtual parameter(s)", len(result))
+    return result

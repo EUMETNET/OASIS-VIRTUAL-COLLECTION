@@ -1,6 +1,7 @@
 """OASIS Virtual Collection — OGC EDR compliant FastAPI application."""
 
-from __future__ import annotations
+import os
+import sys
 
 import logging
 from contextlib import asynccontextmanager
@@ -18,19 +19,39 @@ from app.routers import collections
 from app.routers import edr_queries
 from app.routers import landing
 
+logger = logging.getLogger(__name__)
+
+formatter = logging.Formatter("[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s")
+
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(formatter)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("OASIS Virtual Collection API starting up")
     await init_client()
     yield
+    logger.info("OASIS Virtual Collection API shutting down")
     await close_client()
 
 
 settings = get_settings()
 
+logger.setLevel(
+    {"info": logging.INFO, "debug": logging.DEBUG}[
+        os.getenv("LOG_LEVEL", "info").lower()
+    ],
+)
+
+logging.basicConfig(
+    handlers=[stream_handler],
+)
+
 logging.getLogger("uvicorn.access").addFilter(
     EndpointFilter(settings.access_log_filter_paths)
 )
+logger.debug("Access log filter active for paths: %s", settings.access_log_filter_paths)
 
 app = FastAPI(
     title=settings.virtual_collection_title,
@@ -39,7 +60,7 @@ app = FastAPI(
         "requests to the Meteogate EDR API. Configure exposed parameters in "
         "`config/virtual_collections.json`."
     ),
-    version="1.0.0",
+    version=os.getenv("VERSION", "unknown"),
     lifespan=lifespan,
     license_info={
         "name": "Apache 2.0",
