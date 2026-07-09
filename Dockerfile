@@ -1,5 +1,5 @@
 # ── Stage 1: dependency installation ──────────────────────────────────────────
-FROM registry.met.no/baseimg/ubuntu:26.04 AS builder
+FROM python:3.14-slim-bookworm as builder
 
 # Copy uv from the official image — single static binary, no extra deps needed
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -7,8 +7,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_PYTHON_INSTALL_DIR=/opt/python
+  UV_LINK_MODE=copy \
+  UV_PYTHON_INSTALL_DIR=/opt/python
 
 # Install Python into a fixed, non-home path so it is easy to copy and
 # unambiguous in the runtime stage
@@ -21,24 +21,24 @@ ENV UV_PYTHON_DOWNLOADS=never
 # pyproject.toml and uv.lock are bind-mounted for the duration of each RUN
 # command only — they are never written into an image layer.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    uv sync --frozen --no-dev --no-install-project
+  --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+  --mount=type=bind,source=uv.lock,target=uv.lock \
+  uv sync --frozen --no-dev --no-install-project
 
 # Copy source and install the project itself
 COPY app ./app
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    uv sync --frozen --no-dev
+  --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+  --mount=type=bind,source=uv.lock,target=uv.lock \
+  uv sync --frozen --no-dev
 
 
 # ── Stage 2: minimal runtime image ────────────────────────────────────────────
-FROM registry.met.no/baseimg/ubuntu:26.04 AS runtime
+FROM python:3.14-slim-bookworm as runtime
 
 # Create the non-root user before any COPY --chown references it
 RUN groupadd --system appgroup && \
-    useradd --system --gid appgroup --no-create-home --shell /sbin/nologin appuser
+  useradd --system --gid appgroup --no-create-home --shell /sbin/nologin appuser
 
 WORKDIR /app
 
