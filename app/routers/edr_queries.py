@@ -360,11 +360,9 @@ async def _run_query(
         )
         logger.debug(
             "Upstream response type='%s'",
-            response.get("type")
-            if isinstance(response, dict)
-            else type(response).__name__,
+            response.get("type", "unknown") if isinstance(response, dict) else type(response).__name__,
         )
-        results.append(response.json())
+        results.append(response)
         upstream_params_per_group.append(upstream_params)
 
     if len(results) == 0:
@@ -542,28 +540,39 @@ async def area_query(
 
 
 @router.get(
-    "/cube",
-    summary="Cube query",
-    description="Returns data within a 2D bounding box (and optional vertical extent).",
+    "/corridor",
+    summary="Corridor query",
+    description="Returns data along a corridor around a trajectory.",
 )
-async def cube_query(
+async def corridor_query(
     request: Request,
     collection_id: str,
-    bbox: str = Query(
-        ...,
-        description="Bounding box as `minLon,minLat,maxLon,maxLat` (or with z: `minLon,minLat,minZ,maxLon,maxLat,maxZ`).",
-    ),
+    coords: str = Query(..., description="WKT LINESTRING geometry."),
+    corridor_width: float = Query(..., alias="corridor-width", description="Width of the corridor."),
+    width_units: str = Query("km", alias="width-units", description="Units for corridor width (e.g. `km`, `m`)."),
     parameter_name: str | None = Query(None, alias="parameter-name"),
     datetime: str = Query(..., description="RFC 3339 datetime or interval."),
     z: str | None = Query(None),
+    resolution_x: float | None = Query(None, alias="resolution-x"),
+    resolution_z: float | None = Query(None, alias="resolution-z"),
     crs: str | None = Query(None),
     f: str | None = Query("CoverageJSON"),
 ) -> Response:
     return await _run_query(
-        "cube",
+        "corridor",
         collection_id,
         parameter_name,
-        {"bbox": bbox, "datetime": datetime, "z": z, "crs": crs, "f": f},
+        {
+            "coords": coords,
+            "corridor-width": corridor_width,
+            "width-units": width_units,
+            "datetime": datetime,
+            "z": z,
+            "resolution-x": resolution_x,
+            "resolution-z": resolution_z,
+            "crs": crs,
+            "f": f,
+        },
     )
 
 
@@ -650,7 +659,7 @@ async def location_query(
             continue
 
         if data:
-            results.append(data.json())
+            results.append(data)
         upstream_params_per_group.append(upstream_params)
 
     if not results:

@@ -64,7 +64,7 @@ async def upstream_get(path: str, params: dict[str, Any] | None = None) -> Any:
         response = await client.get(path, params=params)
         response.raise_for_status()
         logger.debug("Upstream GET path=%s status=%s", path, response.status_code)
-        return response
+        return response.json()
     except httpx.HTTPStatusError as exc:
         logger.debug(
             "Upstream HTTP error for path=%s: status=%s body=%s",

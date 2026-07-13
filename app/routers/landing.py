@@ -83,8 +83,7 @@ _CONFORMANCE_CLASSES: list[str] = [
     "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/position",
     "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/radius",
     "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/area",
-    "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/cube",
-    "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/trajectory",
+
     "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/corridor",
     "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/locations",
     "http://www.opengis.net/spec/ogcapi-edr-1/1.0/conf/items",

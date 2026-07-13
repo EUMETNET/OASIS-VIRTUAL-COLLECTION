@@ -11,8 +11,6 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
 
-import datetime
-
 from edr_pydantic.collections import Collection
 from edr_pydantic.collections import Collections
 from edr_pydantic.collections import DataQueries
@@ -20,7 +18,7 @@ from edr_pydantic.data_queries import EDRQuery
 from edr_pydantic.data_queries import EDRQueryLink
 from edr_pydantic.extent import Extent
 from edr_pydantic.extent import Spatial
-from edr_pydantic.extent import Temporal
+
 from edr_pydantic.link import Link
 from edr_pydantic.observed_property import ObservedProperty
 from edr_pydantic.parameter import Parameter
@@ -28,8 +26,6 @@ from edr_pydantic.parameter import Parameters
 from edr_pydantic.unit import Symbol
 from edr_pydantic.unit import Unit
 from edr_pydantic.variables import Variables
-
-from app.proxy import upstream_get
 
 import logging
 
@@ -92,29 +88,10 @@ async def _build_collection(base_url: str, cfg: VirtualCollectionConfig) -> Coll
         position=_edr_query(base_url, collection_id, "position"),
         radius=_edr_query(base_url, collection_id, "radius"),
         area=_edr_query(base_url, collection_id, "area"),
-        cube=_edr_query(base_url, collection_id, "cube"),
+
+        corridor=_edr_query(base_url, collection_id, "corridor"),
         locations=_edr_query(base_url, collection_id, "locations"),
         items=_edr_query(base_url, collection_id, "items"),
-    )
-
-    upstream_extens = await upstream_get("/collections/observations")
-    upstream_extens = upstream_extens.json()
-    upstream_extens = {
-        k: upstream_extens["extent"].get(k)
-        for k in upstream_extens["extent"]
-        if k in ["spatial", "temporal"]
-    }
-    print(upstream_extens["temporal"])
-
-    temporal = Temporal(
-        interval=[
-            [
-                datetime.datetime.fromisoformat(i)
-                for i in upstream_extens["temporal"]["interval"][0]
-            ]
-        ],
-        values=upstream_extens["temporal"]["values"],
-        trs="Gregorian",
     )
 
     return Collection(
@@ -136,8 +113,10 @@ async def _build_collection(base_url: str, cfg: VirtualCollectionConfig) -> Coll
             ),
         ],
         extent=Extent(
-            spatial=Spatial(**upstream_extens["spatial"]),
-            temporal=temporal,
+            spatial=Spatial(
+                bbox=[[-180.0, -90.0, 180.0, 90.0]],
+                crs="http://www.opengis.net/def/crs/OGC/1.3/CRS84",
+            ),
         ),
         data_queries=data_queries,
         parameter_names=parameter_names,

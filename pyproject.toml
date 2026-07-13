@@ -4,22 +4,15 @@ version = "0.1.0"
 description = "OASIS Virtual Collection API"
 requires-python = ">=3.12"
 dependencies = [
-    "covjson-pydantic>=0.8.0",
-    "edr-pydantic>=0.7.0",
-    "fastapi>=0.115.0",
-    "httpx>=0.28.0",
-    "pydantic-core>=2.46.0",
-    "pydantic-geojson>=0.3.2",
-    "pydantic-settings>=2.0.0",
-    "python-dotenv>=1.0.0",
-    "uvicorn[standard]>=0.32.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
-    "httpx>=0.28.0",
+  "covjson-pydantic>=0.8.0",
+  "edr-pydantic>=0.7.0",
+  "fastapi>=0.115.0",
+  "httpx>=0.28.0",
+  "pydantic-core>=2.46.0",
+  "pydantic-geojson>=0.3.2",
+  "pydantic-settings>=2.0.0",
+  "python-dotenv>=1.0.0",
+  "uvicorn[standard]>=0.32.0",
 ]
 
 [build-system]
@@ -36,5 +29,8 @@ asyncio_mode = "auto"
 
 [dependency-groups]
 dev = [
-    "debugpy>=1.8.21",
+  "debugpy>=1.8.21",
+  "pytest>=9.1.1",
+  "pytest-asyncio>=0.24.0",
+  "httpx>=0.28.0",
 ]

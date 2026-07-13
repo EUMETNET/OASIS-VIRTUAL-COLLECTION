@@ -129,8 +129,6 @@ async def test_collection_has_all_query_types(client: AsyncClient):
         "position",
         "radius",
         "area",
-        "cube",
-        "trajectory",
         "corridor",
         "locations",
         "items",
@@ -242,8 +240,6 @@ async def test_data_query_datetime_is_required(client: AsyncClient):
         f"/collections/{{collection_id}}/position",
         f"/collections/{{collection_id}}/radius",
         f"/collections/{{collection_id}}/area",
-        f"/collections/{{collection_id}}/cube",
-        f"/collections/{{collection_id}}/trajectory",
         f"/collections/{{collection_id}}/corridor",
         f"/collections/{{collection_id}}/items",
     ]
